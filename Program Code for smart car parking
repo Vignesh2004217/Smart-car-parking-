@@ -1,0 +1,120 @@
+#include <Servo.h>
+#include <LiquidCrystal_I2C.h>
+
+// Servo and LCD
+Servo gateServo;
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Sensor Pins
+const int IR_ENTRY = 2;
+const int IR_EXIT = 3;
+const int SLOT_SENSORS[4] = {4, 5, 6, 7};
+
+// Parking Slot Status
+bool slots[4] = {false, false, false, false}; // false = empty
+
+int totalSlots = 4;
+
+// Servo positions
+int openPos = 90;
+int closedPos = 0;
+
+void setup() {
+  lcd.begin();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("Parking System");
+
+  gateServo.attach(9);
+  gateServo.write(closedPos);
+
+  for (int i = 0; i < 4; i++) {
+    pinMode(SLOT_SENSORS[i], INPUT);
+  }
+
+  pinMode(IR_ENTRY, INPUT);
+  pinMode(IR_EXIT, INPUT);
+  
+  delay(2000);
+  updateDisplay();
+}
+
+void loop() {
+  // Entry Detection
+  if (digitalRead(IR_ENTRY) == LOW && availableSlot() != -1) {
+    openGate();
+    delay(2000); // Wait for vehicle to enter
+    int slot = detectSlot();
+    if (slot != -1) {
+      slots[slot] = true;
+    }
+    closeGate();
+    updateDisplay();
+  }
+
+  // Exit Detection
+  if (digitalRead(IR_EXIT) == LOW) {
+    openGate();
+    delay(2000); // Wait for vehicle to exit
+    int slot = detectVacatedSlot();
+    if (slot != -1) {
+      slots[slot] = false;
+    }
+    closeGate();
+    updateDisplay();
+  }
+}
+
+void openGate() {
+  gateServo.write(openPos);
+}
+
+void closeGate() {
+  delay(1000);
+  gateServo.write(closedPos);
+}
+
+int availableSlot() {
+  for (int i = 0; i < 4; i++) {
+    if (!slots[i]) return i;
+  }
+  return -1;
+}
+
+int detectSlot() {
+  for (int i = 0; i < 4; i++) {
+    if (digitalRead(SLOT_SENSORS[i]) == LOW) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+int detectVacatedSlot() {
+  for (int i = 0; i < 4; i++) {
+    if (digitalRead(SLOT_SENSORS[i]) == HIGH) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+void updateDisplay() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Slots:");
+  for (int i = 0; i < 4; i++) {
+    lcd.print(slots[i] ? "F" : "E"); // F = Full, E = Empty
+  }
+  lcd.setCursor(0, 1);
+  lcd.print("Free: ");
+  lcd.print(countFree());
+}
+
+int countFree() {
+  int count = 0;
+  for (int i = 0; i < 4; i++) {
+    if (!slots[i]) count++;
+  }
+  return count;
+}
